@@ -7,11 +7,15 @@ from pprint import pprint
 import keyboard
 import requests
 from escpos.printer import Usb
+from slack_bolt import App
 
 time.sleep(30)
 
 with open("config.json","r") as f:
     config: dict = json.load(f)
+
+# Initiate Slack client
+app = App(token=config["slack"]["bot_token"])
 
 p = Usb(config["printer"][0], config["printer"][1])
 # take a filename and resize it to a specific width and autoscaled height. Returns the PIL object
@@ -34,12 +38,13 @@ def format_param(key: str, value: str) -> None:
     text_size(2)
     p.text("{}\n".format(value))
 
-def print_parking_ticket(name: str = "Visitor", rules: str = ""):
+def print_parking_ticket(contact: dict = "Visitor", rules: str = ""):
     p.image(img_source=resize_image(f'./img/{config["logo"]}', 576),
             impl="bitImageRaster")
     text_size(3)
     p.text("Storage Auth\n")
-    format_param("Name", name)
+    format_param("Name", contact["name"])
+    format_param("#", contact["phone"])
     format_param("Date left", datetime.now().strftime("%m-%d %H:%M"))
     format_param("Latest pickup", (datetime.now() + timedelta(days=3)).strftime("%a %m-%d %H:%M"))
     text_size(1)
@@ -64,15 +69,17 @@ def print_slack_invite() -> None:
     p.qr("https://perart.io/slack",size=8)
     p.cut()
 
-def get_name(keys: dict, key: str) -> str:
+def get_contact(keys: dict, key: str) -> str:
     """Get the name of the person with the given key from TidyHQ"""
     # Get all fresh door keys from TidyHQ
     if key not in keys:
-        requests.get(f'{config["tidyauth_address"]}/api/v1/keys/door', params={"token":config["tidyauth_token"], "update": "tidyhq"})
-        keys = r.json()
-        if key not in keys:
-            return "Unknown"
-    return keys.get(key, {"name": "Unknown"})["name"]
+        r = requests.get(f'{config["tidyauth_address"]}/api/v1/keys/contacts', params={"token":config["tidyauth_token"], "update": "tidyhq"})
+        keys = reorder_keys(r.json())
+    if key not in keys:
+        return {'name': '_____',
+                'phone': '_____',
+                'tag': key}
+    return keys[key]
 
 # Accepts a string and formats it so that each line is no longer than 48 characters
 def format_text(text: str) -> list:
@@ -98,6 +105,27 @@ def get_events(n: int = 4) -> list[dict]:
             upcoming_events.append(event)
     return upcoming_events
 
+def reorder_keys(keys: dict) -> dict:
+    new_keys = {}
+    for key in keys:
+        if keys[key]["tag"] in new_keys:
+            new_keys[keys[key]["tag"]] = keys[key]
+    return new_keys
+
+def send_slack(contact):
+    slack_str = ""
+    if "slack" in contact:
+        slack_str = f'<@{contact["slack"]}> '
+        app.client_postMessage(
+            channel=contact["slack"],
+            text=f'G\'day {slack_str}, it looks like you\'ve printed a ticket to leave a project in the space.\nAs a reminder this ticket will expire on {(datetime.now() + timedelta(days=3)).strftime("%a %m-%d %H:%M")}.\nIf you want you can use `/remind` to create a reminder for yourself :slightly_smiling_face:'
+        )
+    app.client.chat_postMessage(
+        channel=config["slack"]["notification_channel"],
+        text=f'{slack_str}{contact["name"]}) has printed a project parking auth ticket'
+    )
+
+
 # Format rules
 
 rules = """* Projects can be left in the space for up to 3 days after last use.
@@ -110,8 +138,8 @@ for rule in rules.split("\n"):
 
 # Prefetch keys
 print("Prefetching keys")
-r = requests.get(f'{config["tidyauth_address"]}/api/v1/keys/door', params={"token":config["tidyauth_token"], "update": "tidyhq"})
-keys = r.json()
+r = requests.get(f'{config["tidyauth_address"]}/api/v1/keys/contacts', params={"token":config["tidyauth_token"], "update": "tidyhq"})
+keys = reorder_keys(r.json())
 print(f'Got {len(keys)} keys')
 print("Listening for key scans")
 
@@ -122,5 +150,5 @@ while True:
         if x.event_type == "down" and x.name != "enter":
             s+=x.name
     if len(s) == 10:
-        name = get_name(keys=keys, key=s)
-        print_parking_ticket(name=name,rules=rule_lines)
+        contact = get_contact(keys=keys, key=s)
+        print_parking_ticket(contact=contact,rules=rule_lines)

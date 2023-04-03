@@ -1,4 +1,8 @@
-{"tidyauth_token":"",
+{"tidyauth_token":"XXXX",
+ "tidyauth_address":"http://server:8000",
+ "slack":{"bot_token":"xoxb-",
+          "app_token":"xapp-1",
+          "notification_channel":"CXXX"},
  "printer":["0x04c5", "0x126e"],
  "logo":"logo_wide.png",
  "events":"https://XXX/reports/events.json"}
