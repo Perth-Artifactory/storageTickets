@@ -56,7 +56,7 @@ def print_parking_ticket(contact: dict = "Visitor", rules: str = ""):
     p.text("\nRules:\n")
     for line in rules:
         p.text(line+"\n")
-    p.text("\nEvents with 4 days:\n")
+    p.text("\nEvents within 4 days:\n")
     for event in get_events():
         p.text(f'{event["summary"]}: {event["start"].strftime("%d/%m %H:%M")}\n')
     p.cut()
@@ -74,7 +74,8 @@ def print_slack_invite() -> None:
     p.qr("https://perart.io/slack",size=8)
     p.cut()
 
-def get_contact(keys: dict, key: str) -> str:
+def get_contact(key: str) -> str:
+    global keys
     """Get the name of the person with the given key from TidyHQ"""
     # Get all fresh door keys from TidyHQ
     if key not in keys:
