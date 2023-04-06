@@ -161,7 +161,7 @@ while True:
     if len(s) == 20:
         s = s[10:]
     if len(s) == 10:
-        contact = get_contact(keys=keys, key=s)
+        contact = get_contact(key=s)
         pprint(contact)
         print_parking_ticket(contact=contact,rules=rule_lines)
         send_slack(contact)
