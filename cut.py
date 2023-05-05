@@ -1,6 +1,7 @@
 import json
+import printer
 
-from escpos.printer import Usb
+p = printer.connect()
 
 with open("config.json","r") as f:
     config: dict = json.load(f)

@@ -1,0 +1,4 @@
+from escpos.printer import Usb
+
+def connect():
+    return Usb(0x1234,0x1234)

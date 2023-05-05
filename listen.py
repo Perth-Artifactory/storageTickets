@@ -6,7 +6,8 @@ from pprint import pprint
 
 import keyboard
 import requests
-from escpos.printer import Usb
+import printer
+
 from slack_bolt import App
 
 time.sleep(30)
@@ -17,7 +18,8 @@ with open("config.json","r") as f:
 # Initiate Slack client
 app = App(token=config["slack"]["bot_token"])
 
-p = Usb(config["printer"][0], config["printer"][1])
+p = printer.connect()
+
 # take a filename and resize it to a specific width and autoscaled height. Returns the PIL object
 def resize_image(filename: str, width: int):
     from PIL import Image
@@ -36,6 +38,9 @@ def format_param(key: str, value: str) -> None:
     text_size(1)
     p.text("{}: ".format(key))
     text_size(2)
+    if "___" in value:
+        text_size(3)
+        print("blank line?")
     p.text("{}\n".format(value))
 
 def print_parking_ticket(contact: dict = "Visitor", rules: str = ""):
@@ -44,14 +49,14 @@ def print_parking_ticket(contact: dict = "Visitor", rules: str = ""):
     text_size(3)
     p.text("Storage Auth\n")
     format_param("Name", contact["name"])
-    format_param("#", contact["phone"])
-    format_param("Date left", datetime.now().strftime("%m-%d %H:%M"))
-    format_param("Latest pickup", (datetime.now() + timedelta(days=3)).strftime("%a %m-%d %H:%M"))
+    format_param("Phone", contact["phone"])
+    format_param("Date left", datetime.now().strftime("%d/%m %H:%M"))
+    format_param("Latest pickup", (datetime.now() + timedelta(days=3)).strftime("%a %d/%m %H:%M"))
     text_size(1)
     p.text("\nRules:\n")
     for line in rules:
         p.text(line+"\n")
-    p.text("\nEvents with 4 days:\n")
+    p.text("\nEvents within 4 days:\n")
     for event in get_events():
         p.text(f'{event["summary"]}: {event["start"].strftime("%d/%m %H:%M")}\n')
     p.cut()
@@ -69,15 +74,17 @@ def print_slack_invite() -> None:
     p.qr("https://perart.io/slack",size=8)
     p.cut()
 
-def get_contact(keys: dict, key: str) -> str:
+def get_contact(key: str) -> str:
+    global keys
     """Get the name of the person with the given key from TidyHQ"""
     # Get all fresh door keys from TidyHQ
     if key not in keys:
+        print("Key not found, refreshing from tidyauth just in case")
         r = requests.get(f'{config["tidyauth_address"]}/api/v1/keys/contacts', params={"token":config["tidyauth_token"], "update": "tidyhq"})
         keys = reorder_keys(r.json())
     if key not in keys:
-        return {'name': '_____',
-                'phone': '_____',
+        return {'name': '___________',
+                'phone': '__________',
                 'tag': key}
     return keys[key]
 
@@ -111,23 +118,24 @@ def get_events(n: int = 4) -> list[dict]:
 def reorder_keys(keys: dict) -> dict:
     new_keys = {}
     for key in keys:
-        if keys[key]["tag"] in new_keys:
+        if keys[key].get("tag"):
             new_keys[keys[key]["tag"]] = keys[key]
     return new_keys
 
 def send_slack(contact):
     slack_str = ""
     if "slack" in contact:
-        slack_str = f'<@{contact["slack"]}> '
-        app.client_postMessage(
+        slack_str = f'<@{contact["slack"]}>'
+        app.client.chat_postMessage(
             channel=contact["slack"],
             text=f'G\'day {slack_str}, it looks like you\'ve printed a ticket to leave a project in the space.\nAs a reminder this ticket will expire on {(datetime.now() + timedelta(days=3)).strftime("%a %m-%d %H:%M")}.\nIf you want you can use `/remind` to create a reminder for yourself :slightly_smiling_face:'
         )
+    else:
+        contact["name"] = contact["tag"]
     app.client.chat_postMessage(
         channel=config["slack"]["notification_channel"],
-        text=f'{slack_str}{contact["name"]}) has printed a project parking auth ticket'
+        text=f'{slack_str} ({contact["name"]}) has printed a project parking auth ticket'
     )
-
 
 # Format rules
 
@@ -152,6 +160,11 @@ while True:
     for x in recorded:
         if x.event_type == "down" and x.name != "enter":
             s+=x.name
+    print(s)
+    if len(s) == 20:
+        s = s[10:]
     if len(s) == 10:
-        contact = get_contact(keys=keys, key=s)
+        contact = get_contact(key=s)
+        pprint(contact)
         print_parking_ticket(contact=contact,rules=rule_lines)
+        send_slack(contact)
