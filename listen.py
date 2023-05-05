@@ -95,8 +95,11 @@ def format_text(text: str) -> list:
 
 # Downloads a json file containing a list of upcoming events and returns a list of any events in the next n days
 def get_events(n: int = 4) -> list[dict]:
-    r = requests.get(config["events"])
-    events = r.json()
+    try:
+        r = requests.get(config["events"])
+        events = r.json()
+    except:
+        return []
     upcoming_events = []
     for event in events:
         if datetime.strptime(event["start"], "%Y-%m-%dT%H:%M:%S+08:00") < datetime.now() + timedelta(days=n):
