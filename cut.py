@@ -1,10 +1,9 @@
 import json
-import printer
-
-p = printer.connect()
+import requests
 
 with open("config.json","r") as f:
     config: dict = json.load(f)
 
-p = Usb(config["printer"][0], config["printer"][1])
-p.cut()
+d = []
+d.append({"command": "cut"})
+requests.put(config["escpos-web"], json=d)
