@@ -137,6 +137,13 @@ def send_slack(contact):
         text=f'{slack_str} ({contact["name"]}) has printed a project parking auth ticket'
     )
 
+# Accepts a string and checks whether each character in that string is a number
+def is_number(s: str) -> bool:
+    for c in s:
+        if c not in "0123456789":
+            return False
+    return True
+
 # Format rules
 
 rules = """* Projects can be left in the space for up to 3 days after last use.
@@ -164,7 +171,10 @@ while True:
     if len(s) == 20:
         s = s[10:]
     if len(s) == 10:
-        contact = get_contact(key=s)
-        pprint(contact)
-        print_parking_ticket(contact=contact,rules=rule_lines)
-        send_slack(contact)
+        
+        # check that s only contains numbers
+        if is_number(s):
+            contact = get_contact(key=s)
+            pprint(contact)
+            print_parking_ticket(contact=contact,rules=rule_lines)
+            send_slack(contact)
